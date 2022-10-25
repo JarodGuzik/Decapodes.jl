@@ -17,6 +17,17 @@ PressureFlow = quote
   P::Form0{X}
   C::Form0{X}
 
+  #State parameters
+  C::Form0{X}
+  k::Constant{ℝ}
+  μ::Constant{ℝ}
+  γ::Constant{ℝ}
+  βc::Constant{ℝ}
+  γc::Constant{ℝ}
+  βₚ::Constant{ℝ}
+  γₚ::Constant{ℝ}
+
+
   # derived quantities
   ΔV::Form1{X}
   ∇P::Form1{X}
@@ -40,11 +51,11 @@ PressureFlow = quote
   ΔP == Δ₀(P)
   ΔC == Δ₀(P)
 
-  V̇  == α(∇P) + μ(ΔV)
-  ϕₚ == γₚ(-(L₀(V, P))) 
-  ϕc == γc(-(L₀(V, C))) 
-  Ṗ == βₚ(Δ₀(P)) + ∘(dual_d₁,⋆₀⁻¹)(ϕₚ)
-  Ċ == βc(Δ₀(C)) + ∘(dual_d₁,⋆₀⁻¹)(ϕc)
+  V̇  == α*∇P + μ*ΔV
+  ϕₚ == γₚ*(-(L₀(V, P))) 
+  ϕc == γc*(-(L₀(V, C))) 
+  Ṗ == βₚ*Δ₀(P) + ∘(dual_d₁,⋆₀⁻¹)(ϕₚ)
+  Ċ == βc*Δ₀(C) + ∘(dual_d₁,⋆₀⁻¹)(ϕc)
 
   
   # Ṗ  == ϕₚ
@@ -57,15 +68,16 @@ flatten_form(vfield::Function, mesh) =  ♭(mesh, DualVectorField(vfield.(mesh[t
 function generate(sd, my_symbol; hodge=GeometricHodge())
   i0 = (v,x) -> ⋆(1, sd, hodge=hodge)*wedge_product(Tuple{0,1}, sd, v, inv_hodge_star(0,sd, hodge=DiagonalHodge())*x)
   op = @match my_symbol begin
-    :k => x->2000x
-    :μ => x->-0.0001x
+    #Old method for setting parameters
+    # :k => x->2000x
+    # :μ => x->-0.0001x
     # :μ => x->-2000x
     # :α => x->100*x
-    :α => x->0.5*x  # divide alpha by length of mesh for proper scaling
-    :βₚ => x->2000*x
-    :γₚ => x->1*x    
-    :βc => x->2000*x
-    :γc => x->1*x
+    # :α => x->0.5*x  # divide alpha by length of mesh for proper scaling
+    # :βₚ => x->2000*x
+    # :γₚ => x->1*x    
+    # :βc => x->2000*x
+    # :γc => x->1*x
     :⋆₀ => x->⋆(0,sd,hodge=hodge)*x
     :⋆₁ => x->⋆(1, sd, hodge=hodge)*x
     :⋆₀⁻¹ => x->inv_hodge_star(0,sd, x; hodge=hodge)
@@ -106,12 +118,12 @@ function generate(sd, my_symbol; hodge=GeometricHodge())
   return (args...) ->  op(args...)
 end
 
-include("coordinates.jl")
+#include("coordinates.jl")
 include("spherical_meshes.jl")
 
 radius = 6371+90
 
-primal_earth = loadmesh(Icosphere(5,radius))
+primal_earth = loadmesh(Icosphere(3,radius))
 nploc = argmax(x -> x[3], primal_earth[:point])
 
 orient!(primal_earth)
@@ -172,11 +184,13 @@ begin
 tₑ = 15.0
 
 @info("Precompiling Solver")
-prob = ODEProblem(fₘ,u₀,(0,1e-4))
+#Change the paramters for the ode solver in here. This tests for stability
+prob = ODEProblem(fₘ,u₀,(0,1e-4),(k=1, μ=-.001, α=0.5, βc=1e4, γc=1.0, βₚ=1e4, γₚ=1.0))
 soln = solve(prob, Tsit5())
 soln.retcode != :Unstable || error("Solver was not stable")
 @info("Solving")
-prob = ODEProblem(fₘ,u₀,(0,tₑ))
+#Make sure to also change these parameters, this is the actual solver
+prob = ODEProblem(fₘ,u₀,(0,tₑ),(k=1, μ=-.001, α=0.5, βc=1e4, γc=1.0, βₚ=1e4, γₚ=1.0))
 soln = solve(prob, Tsit5())
 @info("Done")
 end
